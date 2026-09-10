@@ -83,6 +83,21 @@ Status geral: **Não iniciado**
 
 ### Passo 1 — Setup
 - Evidências:
+### Passo 1 — Setup
+- Evidências:
+  - Ambiente local preparado com Node.js **v20.20.2** e npm **10.8.2**.
+  - Infra do backend subida com Docker Compose em `nestjs-project/`.
+  - Serviços identificados no compose: `db`, `mailpit`, `nestjs-api`.
+  - Banco PostgreSQL respondeu como pronto para conexões (log: `database system is ready to accept connections`).
+  - Migration executada com uso explícito de DataSource (comando no container da API).
+  - Testes executados para baseline do ambiente:
+    - `npm test` executado no serviço `nestjs-api`.
+    - Resultado observado: execução parcial com falhas pré-existentes do baseline (não bloqueante para o setup inicial).
+  - Decisão de processo: seguir para etapa de **Research** após validação de infraestrutura/migrations, conforme ordem das orientações.
+
+- Observações:
+  - Durante o setup foi identificado que o nome correto do serviço de aplicação no compose é `nestjs-api` (não `api`).
+  - Também foi necessário informar o `dataSource` para comando de migration no TypeORM CLI.
 
 ### Passo 2 — Research
 - Evidências:
