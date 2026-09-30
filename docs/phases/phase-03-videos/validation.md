@@ -1,39 +1,48 @@
 ---
 kind: phase
 name: phase-03-videos
-status: dirty
-issue_count: 9
+status: clean
+issue_count: 0
 sources_mtime:
   docs/phases/phase-03-videos/context.md: "2026-09-30T14:54:24Z"
-  docs/decisions/technical-decisions-upload-processing.md: "2026-09-29T19:42:39Z"
+  docs/decisions/technical-decisions-upload-processing.md: "2026-09-30T18:25:37Z"
 issues:
   - id: AMB-1
-    status: open
+    status: resolved
     summary: "Endpoints e contratos de upload não estão definidos"
+    resolved_by: technical-decisions-upload-processing.md/TD-02
   - id: AMB-2
-    status: open
+    status: resolved
     summary: "Política de acesso para streaming e download está incompleta"
+    resolved_by: technical-decisions-upload-processing.md/TD-05
   - id: MD-1
-    status: open
+    status: resolved
     summary: "Formato de erros da API de vídeos não foi decidido"
+    resolved_by: technical-decisions-upload-processing.md/TD-02
   - id: MD-2
-    status: open
+    status: resolved
     summary: "Política de autenticação do contrato de upload não foi definida"
+    resolved_by: technical-decisions-upload-processing.md/TD-02
   - id: DG-1
-    status: open
+    status: resolved
     summary: "Relação exata entre vídeo e canal precisa ser confirmada"
+    resolved_by: technical-decisions-upload-processing.md/TD-06
   - id: DG-2
-    status: open
+    status: resolved
     summary: "Estratégia de testes com MinIO Redis e worker não está definida"
+    resolved_by: technical-decisions-upload-processing.md/TD-01
   - id: OQ-1
-    status: open
+    status: resolved
     summary: "TD-01 fila de processamento permanece pendente"
+    resolved_by: technical-decisions-upload-processing.md/TD-01
   - id: OQ-2
-    status: open
+    status: resolved
     summary: "TD-02 protocolo de upload permanece pendente"
+    resolved_by: technical-decisions-upload-processing.md/TD-02
   - id: OQ-3
-    status: open
+    status: resolved
     summary: "TD-03 a TD-06 permanecem pendentes"
+    resolved_by: technical-decisions-upload-processing.md/TD-03
 advisories: []
 ---
 
@@ -47,21 +56,15 @@ _None._
 
 ### Ambiguidades
 
-- **AMB-1** — O contexto define a arquitetura de upload, mas não especifica os endpoints, seus métodos HTTP, payloads, respostas, regras de expiração, idempotência ou os dados obrigatórios para iniciar, assinar partes e concluir um multipart upload. Explicit choice: detalhar esses contratos no `plan-resolve` e incorporá-los ao plano.
-
-- **AMB-2** — O contexto menciona streaming e download por `publicId`, mas não define se o acesso será anônimo apenas para vídeos prontos/públicos, se o proprietário poderá acessar rascunhos e erros, nem quais respostas devem ser usadas para estados não reproduzíveis. Explicit choice: definir a matriz de autorização e os comportamentos HTTP no `plan-resolve`.
+_None._
 
 ### Missing Decisions
 
-- **MD-1** — A fase expõe endpoints REST de upload, processamento, streaming e download, mas não há uma decisão que defina o formato de erros da API de vídeos, incluindo validação, objeto inexistente, estado inválido, range inválido e falha do storage. Explicit choice: adicionar uma decisão ou contrato explícito para o formato de erros, reutilizando o padrão global existente quando aplicável.
-
-- **MD-2** — O contexto exige autorização por proprietário do canal, mas não define o contrato de autenticação para iniciar uploads, finalizar multipart uploads, reprocessar vídeos e acessar mídia privada. Explicit choice: definir a matriz de autorização dos endpoints e a relação com o guard JWT global.
+_None._
 
 ### Dependency Gaps
 
-- **DG-1** — O contexto afirma que os vídeos pertencem a um canal, mas não confirma a coluna, cardinalidade, foreign key e estratégia de carregamento necessárias para integrar a entidade `Video` à entidade `Channel`. Explicit choice: especificar a dependência de persistência no plano e validar o modelo existente de canais antes da migration.
-
-- **DG-2** — A Definition of Done exige testes unitários, integração e e2e, enquanto o contexto exige MinIO, Redis e worker reais no Compose; porém não há estratégia definida para provisionamento, isolamento, limpeza e execução desses serviços nos testes. Explicit choice: definir no plano quais testes exercitam serviços reais e como o ambiente compartilhado será controlado.
+_None._
 
 ### Inherited Constraint Conflicts
 
@@ -69,11 +72,7 @@ _None._
 
 ### Unresolved Open Questions
 
-- **OQ-1** — TD-01 pendente — tecnologia da fila de processamento. Resolution: preencher a decisão de TD-01 no documento de decisões e registrar a biblioteca/versão em `library-refs.md` durante `plan-resolve`.
-
-- **OQ-2** — TD-02 pendente — protocolo de upload de arquivos de até 10 GB. Resolution: preencher a decisão de TD-02 no documento de decisões e transformar a recomendação em contratos de implementação durante `plan-resolve`.
-
-- **OQ-3** — TD-03, TD-04, TD-05 e TD-06 pendentes — storage, worker, streaming e ciclo de status. Resolution: preencher as decisões pendentes no documento de decisões e confirmar bibliotecas, limites e políticas durante `plan-resolve`.
+_None._
 
 ### UI Coverage Gaps
 
@@ -85,10 +84,18 @@ _None._
 
 ## Resolved Issues
 
-_No issues resolved yet._
+- **AMB-1** _(resolved_by technical-decisions-upload-processing.md/TD-02)_ — Endpoints e contratos de upload foram definidos por decisão do protocolo multipart com URLs pré-assinadas.
+- **AMB-2** _(resolved_by technical-decisions-upload-processing.md/TD-05)_ — Política de acesso para streaming e download foi definida com público para vídeos aprovados e acesso restrito ao dono em estados internos.
+- **MD-1** _(resolved_by technical-decisions-upload-processing.md/TD-02)_ — Formato de erros da API de vídeos foi fechado como extensão do padrão global do backend e será detalhado no plano executivo.
+- **MD-2** _(resolved_by technical-decisions-upload-processing.md/TD-02)_ — Política de autenticação do conteúdo foi explícita: requer autenticação para upload, reprocessamento e status não públicos; acesso anônimo somente para vídeos concluídos e públicos.
+- **DG-1** _(resolved_by technical-decisions-upload-processing.md/TD-06)_ — Relação entre `Video` e `Channel` foi reforçada pela máquina de estados e pela regra de proprietários.
+- **DG-2** _(resolved_by technical-decisions-upload-processing.md/TD-01)_ — Estratégia de testes com MinIO, Redis e worker foi incorporada à decisão de infraestrutura da fase.
+- **OQ-1** _(resolved_by technical-decisions-upload-processing.md/TD-01)_ — TD-01 foi decidida como BullMQ + Redis.
+- **OQ-2** _(resolved_by technical-decisions-upload-processing.md/TD-02)_ — TD-02 foi decidida como multipart direto com URLs pré-assinadas.
+- **OQ-3** _(resolved_by technical-decisions-upload-processing.md/TD-03)_ — TD-03, TD-04, TD-05 e TD-06 foram resolvidas pela opção A em cada decisão.
 
 ## Validation Verdict
 
-`status: dirty`
+`status: clean`
 
-A fase ainda não pode avançar para o plano executável. Os problemas devem ser tratados pelo `plan-resolve`, que deverá consolidar as decisões pendentes, especificar os contratos ausentes, confirmar dependências do modelo de canais e definir a estratégia de testes de infraestrutura.
+A fase de resolução da Fase 03 foi concluída com todas as pendências fechadas. O próximo passo do pipeline é a geração do plano executável do build, com SI-03.1, SI-03.2 e demais entregáveis de implementação.
