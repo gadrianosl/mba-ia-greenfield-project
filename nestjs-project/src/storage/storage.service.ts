@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -14,6 +15,10 @@ import {
 } from '@nestjs/common';
 import * as config_1 from '@nestjs/config';
 import storageConfig from '../config/storage.config';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 
 @Injectable()
 export class StorageService {
@@ -113,6 +118,48 @@ export class StorageService {
         Key: storageKey,
       }),
     );
+  }
+
+  async downloadFile(storageKey: string, localPath: string): Promise<void> {
+    await this.ensureBucket();
+
+    const command = new GetObjectCommand({
+      Bucket: this.config.bucket,
+      Key: storageKey,
+    });
+
+    const response = await this.internalClient.send(command);
+
+    if (!response.Body) {
+      throw new InternalServerErrorException(
+        `Object body is empty for key: ${storageKey}`,
+      );
+    }
+
+    await fs.promises.mkdir(path.dirname(localPath), { recursive: true });
+    await pipeline(
+      response.Body as Readable,
+      fs.createWriteStream(localPath),
+    );
+  }
+
+  async uploadFile(
+    storageKey: string,
+    localPath: string,
+    contentType: string,
+  ): Promise<void> {
+    await this.ensureBucket();
+
+    const fileStream = fs.createReadStream(localPath);
+
+    const command = new PutObjectCommand({
+      Bucket: this.config.bucket,
+      Key: storageKey,
+      Body: fileStream,
+      ContentType: contentType,
+    });
+
+    await this.internalClient.send(command);
   }
 
   private getStatusCode(error: unknown): number | undefined {
