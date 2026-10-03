@@ -231,11 +231,71 @@ export class VideosService {
     } catch (error) {
       this.logger.error(`Erro ao processar o vídeo ${video.public_id}:`, error);
       video.status = VideoStatus.FAILED;
+      video.error_reason = error instanceof Error ? error.message : 'Processing failed';
       await this.videoRepository.save(video);
       throw error;
     } finally {
       await fs.rm(tmpFolder, { recursive: true, force: true });
     }
+  }
+
+  async findOneDetails(publicId: string) {
+    const video = await this.videoRepository.findOne({
+      where: { public_id: publicId },
+    });
+
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    let streamUrl: string | null = null;
+    let thumbnailUrl: string | null = null;
+
+    if (video.status === VideoStatus.READY) {
+      if (video.storage_key) {
+        streamUrl = await this.storageService.getPresignedGetUrl(video.storage_key);
+      }
+      if (video.thumbnail_key) {
+        thumbnailUrl = await this.storageService.getPresignedGetUrl(video.thumbnail_key);
+      }
+    }
+
+    return {
+      ...video,
+      stream_url: streamUrl,
+      thumbnail_url: thumbnailUrl,
+    };
+  }
+
+  async findAllPublic(page = 1, limit = 10) {
+    const [videos, total] = await this.videoRepository.findAndCount({
+      where: { status: VideoStatus.READY },
+      order: { created_at: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const data = await Promise.all(
+      videos.map(async (video) => {
+        let thumbnailUrl: string | null = null;
+        if (video.thumbnail_key) {
+          thumbnailUrl = await this.storageService.getPresignedGetUrl(video.thumbnail_key);
+        }
+        return {
+          ...video,
+          thumbnail_url: thumbnailUrl,
+        };
+      }),
+    );
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        last_page: Math.ceil(total / limit),
+      },
+    };
   }
 
   private async findOwnedVideo(

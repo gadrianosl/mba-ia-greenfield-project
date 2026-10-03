@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { VideosService } from './videos.service';
@@ -23,5 +23,15 @@ export class VideosProcessor extends WorkerHost {
     }
 
     return { completed: true };
+  }
+
+  @OnWorkerEvent('completed')
+  onCompleted(job: Job) {
+    this.logger.log(`Job ID ${job.id} (${job.name}) finalizado com sucesso.`);
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(`Job ID ${job.id} (${job.name}) falhou: ${error.message}`);
   }
 }

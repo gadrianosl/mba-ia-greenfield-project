@@ -109,6 +109,22 @@ export class StorageService {
     });
   }
 
+  async getPresignedGetUrl(
+    storageKey: string,
+    expiresIn = this.config.presignedExpiresInSeconds,
+  ): Promise<string> {
+    await this.ensureBucket();
+
+    const command = new GetObjectCommand({
+      Bucket: this.config.bucket,
+      Key: storageKey,
+    });
+
+    return getSignedUrl(this.publicClient, command, {
+      expiresIn,
+    });
+  }
+
   async headObject(storageKey: string): Promise<HeadObjectCommandOutput> {
     await this.ensureBucket();
 
