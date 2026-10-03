@@ -17,6 +17,7 @@ export enum VideoStatus {
   PROCESSING = 'PROCESSING',
   READY = 'READY',
   ERROR = 'ERROR',
+  FAILED = "FAILED",
 }
 
 @Entity('videos')
