@@ -103,4 +103,4 @@ Ao fim da implementação, a Fase 03 deve entregar uma API funcional para:
 
 ## Observação de rastreabilidade
 
-Este contexto deriva diretamente dos requisitos da fase em `docs/project-plan.md` e das decisões registradas em `docs/decisions/technical-decisions-upload-processing.md`. A implementação e os testes devem seguir precisamente este escopo e não ampliar o desenho sem uma nova decisão formal.
+Este contexto deriva diretamente dos requisitos da fase em `docs/project-plan.md` e das decisões registradas em `docs/decisions/technical-decisions-phase-03-videos.md`. A implementação e os testes devem seguir precisamente este escopo e não ampliar o desenho sem uma nova decisão formal.

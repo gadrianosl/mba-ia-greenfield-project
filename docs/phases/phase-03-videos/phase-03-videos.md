@@ -1,9 +1,8 @@
----
 kind: phase
 name: phase-03-videos
 sources_mtime:
   docs/project-plan.md: "2026-09-30T00:00:00-03:00"
-  docs/decisions/technical-decisions-upload-processing.md: "2026-09-30T18:25:37-03:00"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-30T18:25:37-03:00"
   docs/phases/phase-03-videos/context.md: "2026-09-30T00:00:00-03:00"
   docs/phases/phase-03-videos/library-refs.md: "2026-09-30T20:15:47-03:00"
   docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md: "2026-04-08T14:58:57-03:00"
@@ -206,14 +205,13 @@ Deliver the video upload pipeline for the StreamTube backend: large-file uploads
 
 ## Dependency Map
 
-```
 SI-03.1 (no deps)
 ├── SI-03.2
 │   └── SI-03.3
 │       ├── SI-03.4
 │       │   └── SI-03.5
 │       └── SI-03.6
-```
+
 
 ## Deliverables
 
@@ -232,4 +230,4 @@ SI-03.1 (no deps)
 
 ## Notes
 
-This phase intentionally does not include the frontend video player or UI screens. The goal is to complete the backend contract and infrastructure needed by the next phases, while keeping the system consistent with the architecture defined in `docs/decisions/technical-decisions-upload-processing.md`.
+This phase intentionally does not include the frontend video player or UI screens. The goal is to complete the backend contract and infrastructure needed by the next phases, while keeping the system consistent with the architecture defined in `docs/decisions/technical-decisions-phase-03-videos.md`.
