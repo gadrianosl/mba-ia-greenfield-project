@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -39,13 +40,19 @@ import { VideosModule } from './videos/videos.module';
         password: dbConfig.password,
         database: dbConfig.name,
         autoLoadEntities: true,
-        synchronize: true, // Sincronização automática ativada para desenvolvimento
+        synchronize: true, // Sincronização automática ativada para desenvolvimento[cite: 12]
       }),
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60,
+        limit: 100000,
+      },
+    ]),
     AuthModule,
     VideosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule {} 
