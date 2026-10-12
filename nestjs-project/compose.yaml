@@ -12,7 +12,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_started
       mailpit:
@@ -39,6 +39,11 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   minio:
     image: cgr.dev/chainguard/minio:latest
@@ -56,6 +61,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: streamtube-video-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
 
   mailpit:
     image: axllent/mailpit

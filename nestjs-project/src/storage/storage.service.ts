@@ -125,6 +125,41 @@ export class StorageService {
     });
   }
 
+  async getObjectStream(
+    storageKey: string,
+    range?: string,
+  ): Promise<{
+    stream: Readable;
+    contentLength?: number;
+    contentRange?: string;
+    acceptRanges?: string;
+    contentType?: string;
+  }> {
+    await this.ensureBucket();
+
+    const command = new GetObjectCommand({
+      Bucket: this.config.bucket,
+      Key: storageKey,
+      ...(range && { Range: range }),
+    });
+
+    const response = await this.internalClient.send(command);
+
+    if (!response.Body) {
+      throw new InternalServerErrorException(
+        `Object body is empty for key: ${storageKey}`,
+      );
+    }
+
+    return {
+      stream: response.Body as Readable,
+      contentLength: response.ContentLength,
+      contentRange: response.ContentRange,
+      acceptRanges: response.AcceptRanges ?? 'bytes',
+      contentType: response.ContentType ?? 'video/mp4',
+    };
+  }
+
   async headObject(storageKey: string): Promise<HeadObjectCommandOutput> {
     await this.ensureBucket();
 
@@ -153,10 +188,7 @@ export class StorageService {
     }
 
     await fs.promises.mkdir(path.dirname(localPath), { recursive: true });
-    await pipeline(
-      response.Body as Readable,
-      fs.createWriteStream(localPath),
-    );
+    await pipeline(response.Body as Readable, fs.createWriteStream(localPath));
   }
 
   async uploadFile(

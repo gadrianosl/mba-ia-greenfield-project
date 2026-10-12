@@ -172,7 +172,9 @@ export class VideosService {
       throw new NotFoundException(`Video with ID ${videoId} not found`);
     }
 
-    this.logger.log(`A alterar estado do vídeo ${video.public_id} para PROCESSING...`);
+    this.logger.log(
+      `A alterar estado do vídeo ${video.public_id} para PROCESSING...`,
+    );
     video.status = VideoStatus.PROCESSING;
     await this.videoRepository.save(video);
 
@@ -185,14 +187,18 @@ export class VideosService {
       await this.storageService.downloadFile(storageKey, inputFilePath);
 
       this.logger.log(`Extraindo metadados com FFprobe...`);
-      const metadata: ffmpeg.FfprobeData = await new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(inputFilePath, (err, data) => {
-          if (err) return reject(err);
-          resolve(data);
-        });
-      });
+      const metadata: ffmpeg.FfprobeData = await new Promise(
+        (resolve, reject) => {
+          ffmpeg.ffprobe(inputFilePath, (err, data) => {
+            if (err) return reject(err);
+            resolve(data);
+          });
+        },
+      );
 
-      const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
+      const videoStream = metadata.streams.find(
+        (s) => s.codec_type === 'video',
+      );
       const duration = Math.round(metadata.format.duration || 0);
       const width = videoStream?.width || null;
       const height = videoStream?.height || null;
@@ -211,7 +217,9 @@ export class VideosService {
       });
 
       const thumbnailStorageKey = `videos/${video.public_id}/thumbnail.jpg`;
-      this.logger.log(`Enviando thumbnail (${thumbnailStorageKey}) para o MinIO...`);
+      this.logger.log(
+        `Enviando thumbnail (${thumbnailStorageKey}) para o MinIO...`,
+      );
       await this.storageService.uploadFile(
         thumbnailStorageKey,
         thumbnailPath,
@@ -226,12 +234,15 @@ export class VideosService {
       video.processed_at = new Date();
 
       const updatedVideo = await this.videoRepository.save(video);
-      this.logger.log(`Vídeo ${video.public_id} processado com sucesso (READY).`);
+      this.logger.log(
+        `Vídeo ${video.public_id} processado com sucesso (READY).`,
+      );
       return updatedVideo;
     } catch (error) {
       this.logger.error(`Erro ao processar o vídeo ${video.public_id}:`, error);
       video.status = VideoStatus.FAILED;
-      video.error_reason = error instanceof Error ? error.message : 'Processing failed';
+      video.error_reason =
+        error instanceof Error ? error.message : 'Processing failed';
       await this.videoRepository.save(video);
       throw error;
     } finally {
@@ -253,10 +264,14 @@ export class VideosService {
 
     if (video.status === VideoStatus.READY) {
       if (video.storage_key) {
-        streamUrl = await this.storageService.getPresignedGetUrl(video.storage_key);
+        streamUrl = await this.storageService.getPresignedGetUrl(
+          video.storage_key,
+        );
       }
       if (video.thumbnail_key) {
-        thumbnailUrl = await this.storageService.getPresignedGetUrl(video.thumbnail_key);
+        thumbnailUrl = await this.storageService.getPresignedGetUrl(
+          video.thumbnail_key,
+        );
       }
     }
 
@@ -279,7 +294,9 @@ export class VideosService {
       videos.map(async (video) => {
         let thumbnailUrl: string | null = null;
         if (video.thumbnail_key) {
-          thumbnailUrl = await this.storageService.getPresignedGetUrl(video.thumbnail_key);
+          thumbnailUrl = await this.storageService.getPresignedGetUrl(
+            video.thumbnail_key,
+          );
         }
         return {
           ...video,

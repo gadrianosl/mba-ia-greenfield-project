@@ -39,7 +39,7 @@ import { VideosModule } from './videos/videos.module';
         password: dbConfig.password,
         database: dbConfig.name,
         autoLoadEntities: true,
-        synchronize: false,
+        synchronize: true, // Sincronização automática ativada para desenvolvimento
       }),
     }),
     AuthModule,

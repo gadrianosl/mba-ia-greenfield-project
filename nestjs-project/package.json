@@ -28,8 +28,8 @@
     "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.850.0",
-    "@aws-sdk/s3-request-presigner": "^3.850.0",
+    "@aws-sdk/client-s3": "^3.1147.0",
+    "@aws-sdk/s3-request-presigner": "^3.1147.0",
     "@nestjs-modules/mailer": "^2.3.4",
     "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^11.0.1",
@@ -79,7 +79,7 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
-  "jest": {
+"jest": {
     "moduleFileExtensions": [
       "js",
       "json",
@@ -97,6 +97,9 @@
     "testEnvironment": "node",
     "setupFiles": [
       "dotenv/config"
-    ]
+    ],
+    "transformIgnorePatterns": [
+  "node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared)/)"
+]
   }
 }

@@ -13,7 +13,9 @@ export class VideosProcessor extends WorkerHost {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    this.logger.log(`Iniciando processamento do Job ID: ${job.id} (${job.name})`);
+    this.logger.log(
+      `Iniciando processamento do Job ID: ${job.id} (${job.name})`,
+    );
 
     if (job.name === 'process-video') {
       const { videoId, publicId, storageKey } = job.data;
@@ -32,6 +34,8 @@ export class VideosProcessor extends WorkerHost {
 
   @OnWorkerEvent('failed')
   onFailed(job: Job, error: Error) {
-    this.logger.error(`Job ID ${job.id} (${job.name}) falhou: ${error.message}`);
+    this.logger.error(
+      `Job ID ${job.id} (${job.name}) falhou: ${error.message}`,
+    );
   }
 }
