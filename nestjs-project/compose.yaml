@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: npm run start:dev
+    command: ["tail", "-f", "/dev/null"]
     ports:
       - 3000:3000
     volumes:
@@ -14,7 +14,7 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
       mailpit:
         condition: service_started
 
@@ -46,8 +46,9 @@ services:
       retries: 5
 
   minio:
-    image: cgr.dev/chainguard/minio:latest
-    command: server /data --console-address ":9001"
+    image: bitnamilegacy/minio:2025.4.22-debian-12-r0@sha256:a26e42a4d6550d2fb7708c8ceefc60474b42c124b6f3273a081721ddf1d86b20
+    entrypoint: /opt/bitnami/minio/bin/minio
+    command: server /bitnami/minio/data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: streamtube
       MINIO_ROOT_PASSWORD: streamtube
@@ -55,7 +56,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio-data:/data
+      - minio-data:/bitnami/minio/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
       interval: 10s
@@ -66,7 +67,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: streamtube-video-worker
     restart: unless-stopped
     depends_on:
       db:

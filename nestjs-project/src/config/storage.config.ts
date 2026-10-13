@@ -8,7 +8,7 @@ export default registerAs('storage', () => ({
   secretAccessKey: process.env.MINIO_SECRET_KEY || 'streamtube',
   publicBaseUrl: process.env.MINIO_PUBLIC_URL || 'http://localhost:9000',
   uploadPartSize: Number.parseInt(
-    process.env.MINIO_UPLOAD_PART_SIZE || '5242880',
+    process.env.MINIO_UPLOAD_PART_SIZE || '67108864',
     10,
   ),
   presignedExpiresInSeconds: Number.parseInt(

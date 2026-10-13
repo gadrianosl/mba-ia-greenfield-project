@@ -1,5 +1,10 @@
 import {
   CreateBucketCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  ListPartsCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
@@ -19,6 +24,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
+import { VideoException } from '../videos/video.exception';
 
 @Injectable()
 export class StorageService {
@@ -92,6 +98,143 @@ export class StorageService {
     return `videos/${publicId}/source`;
   }
 
+  async initiateMultipart(
+    storageKey: string,
+    contentType: string,
+  ): Promise<string> {
+    await this.ensureBucket();
+    const result = await this.request(() =>
+      this.internalClient.send(
+        new CreateMultipartUploadCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+          ContentType: contentType,
+        }),
+      ),
+    );
+    if (!result.UploadId)
+      throw new VideoException(
+        'STORAGE_UNAVAILABLE',
+        503,
+        'Storage did not return an upload ID',
+      );
+    return result.UploadId;
+  }
+
+  async signPart(
+    storageKey: string,
+    uploadId: string,
+    partNumber: number,
+    size: number,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.publicClient,
+      new UploadPartCommand({
+        Bucket: this.config.bucket,
+        Key: storageKey,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        ContentLength: size,
+      }),
+      { expiresIn: this.config.presignedExpiresInSeconds },
+    );
+  }
+
+  async listParts(
+    storageKey: string,
+    uploadId: string,
+  ): Promise<{ part_number: number; etag: string; size: number }[]> {
+    const parts: { part_number: number; etag: string; size: number }[] = [];
+    let marker: string | undefined;
+    do {
+      const result = await this.request(() =>
+        this.internalClient.send(
+          new ListPartsCommand({
+            Bucket: this.config.bucket,
+            Key: storageKey,
+            UploadId: uploadId,
+            PartNumberMarker: marker,
+          }),
+        ),
+      );
+      for (const part of result.Parts || []) {
+        if (
+          part.PartNumber !== undefined &&
+          part.ETag &&
+          part.Size !== undefined
+        ) {
+          parts.push({
+            part_number: part.PartNumber,
+            etag: part.ETag,
+            size: part.Size,
+          });
+        }
+      }
+      marker = result.IsTruncated ? result.NextPartNumberMarker : undefined;
+    } while (marker);
+    return parts;
+  }
+
+  async completeMultipart(
+    storageKey: string,
+    uploadId: string,
+    parts: { part_number: number; etag: string }[],
+  ): Promise<void> {
+    await this.request(() =>
+      this.internalClient.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: parts.map((part) => ({
+              PartNumber: part.part_number,
+              ETag: part.etag,
+            })),
+          },
+        }),
+      ),
+    );
+  }
+
+  async abortMultipart(storageKey: string, uploadId: string): Promise<void> {
+    await this.request(() =>
+      this.internalClient.send(
+        new AbortMultipartUploadCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+          UploadId: uploadId,
+        }),
+      ),
+    );
+  }
+
+  private async request<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (this.getErrorName(error) === 'NoSuchUpload') {
+        throw new VideoException(
+          'UPLOAD_EXPIRED',
+          410,
+          'Multipart upload is no longer available',
+        );
+      }
+      if (this.getErrorName(error) === 'InvalidRange') {
+        throw new VideoException(
+          'RANGE_NOT_SATISFIABLE',
+          416,
+          'Requested range is outside the video',
+        );
+      }
+      throw new VideoException(
+        'STORAGE_UNAVAILABLE',
+        503,
+        'Object storage operation failed',
+      );
+    }
+  }
+
   async createPresignedPutUrl(
     storageKey: string,
     contentType: string,
@@ -125,6 +268,22 @@ export class StorageService {
     });
   }
 
+  async getProcessingUrl(storageKey: string): Promise<string> {
+    return getSignedUrl(
+      this.internalClient,
+      new GetObjectCommand({
+        Bucket: this.config.bucket,
+        Key: storageKey,
+      }),
+      {
+        expiresIn: Math.min(
+          604800,
+          Number(process.env.VIDEO_PROCESSING_TIMEOUT_SECONDS || 600) + 300,
+        ),
+      },
+    );
+  }
+
   async getObjectStream(
     storageKey: string,
     range?: string,
@@ -143,7 +302,9 @@ export class StorageService {
       ...(range && { Range: range }),
     });
 
-    const response = await this.internalClient.send(command);
+    const response = await this.request(() =>
+      this.internalClient.send(command),
+    );
 
     if (!response.Body) {
       throw new InternalServerErrorException(
@@ -163,11 +324,13 @@ export class StorageService {
   async headObject(storageKey: string): Promise<HeadObjectCommandOutput> {
     await this.ensureBucket();
 
-    return this.internalClient.send(
-      new HeadObjectCommand({
-        Bucket: this.config.bucket,
-        Key: storageKey,
-      }),
+    return this.request(() =>
+      this.internalClient.send(
+        new HeadObjectCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+        }),
+      ),
     );
   }
 
@@ -198,12 +361,13 @@ export class StorageService {
   ): Promise<void> {
     await this.ensureBucket();
 
-    const fileStream = fs.createReadStream(localPath);
+    const fileBody = await fs.promises.readFile(localPath);
 
     const command = new PutObjectCommand({
       Bucket: this.config.bucket,
       Key: storageKey,
-      Body: fileStream,
+      Body: fileBody,
+      ContentLength: fileBody.length,
       ContentType: contentType,
     });
 

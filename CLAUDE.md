@@ -8,22 +8,22 @@ More info in the project overview: [docs/project-plan.md](docs/project-plan.md)
 
 ## Repository Structure
 
-This is a monorepo with two main areas:
+This monorepo contains:
 
-- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
+- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Implemented modules: auth, users, channels, videos, storage, mail, common, config, database and Swagger.
 - `docs/` — Project documentation, architecture diagrams, and planning.
-- `next-frontend/` (Next.js) — not yet initialized
+- `next-frontend/` (Next.js 16) — authentication UI/BFF; video UI is outside Phase 03 scope.
 
 ## Architecture (C4 Container Diagram)
 
 See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 
 - **Frontend** (Next.js) → calls API via REST, streams from Object Storage
-- **API** (Nest.js) → business rules, auth, reads/writes DB, uploads to storage, publishes jobs to queue, sends emails
+- **API** (Nest.js) → business rules, auth, reads/writes DB, coordinates direct multipart uploads, publishes jobs to queue, sends emails
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
-- **Database** (PostgreSQL) → users, channels, videos, comments, likes
+- **Database** (PostgreSQL) → users, channels, auth tokens and videos
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ + Redis) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
 
 ## Docker Networking
@@ -105,3 +105,13 @@ Skip documentation lookup only for trivial operations such as:
 
 If a library is involved and there is uncertainty, documentation lookup is mandatory.
 If the documentation returned does not match the installed version, flag the discrepancy before proceeding.
+
+## Phase 03 — implemented backend
+
+API producer: VideosModule / VideosService / StorageService. Consumer: WorkerModule / VideosProcessor / VideoProcessingService, started by `node dist/worker.js` in video-worker. Only the worker registers the Processor. Compose includes db, redis, minio, mailpit, nestjs-api and video-worker. MinIO image is pinned by digest.
+
+Upload: automatic draft via POST /videos/uploads, signed multipart parts via POST /videos/:publicId/uploads/parts, completion via POST /videos/:publicId/uploads/complete. Existing separate drafts/upload routes remain. Cancel: DELETE /videos/:publicId/upload; retry ERROR: POST /videos/:publicId/process. User-private queries: GET /videos/mine and GET /videos/:publicId. Public READY media: GET /videos, /videos/:publicId/stream and /videos/:publicId/download. Publication/visibility UI belongs to Phase 04.
+
+FFmpeg reads an internal signed HTTP URL with Range/seek support; only thumbnail files are temporary. Metadata/errors never contain signed URLs. Lifecycle is DRAFT → UPLOADING → UPLOADED → PROCESSING → READY or ERROR. Tests use streamtube_test, video-processing-test and streamtube-test, separately from development. Migrations are mandatory; synchronize is disabled. See the phase plan, progress.md and library-refs.md for final contracts and evidence.
+
+Codex equivalents: AGENTS.md, .agents/skills/phase-03-workflow/SKILL.md and .codex/config.toml. If Context7 cannot be reached, record that fact and use official version-specific sources; never fabricate MCP results.

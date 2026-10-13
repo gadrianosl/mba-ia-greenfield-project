@@ -1,48 +1,42 @@
 ---
 libs:
-  bullmq:
-    version: "latest compatible major; verify with npm install before implementation"
-    context7_id: "/taskforcesh/bullmq"
-    fetched_at: "2026-09-30T00:00:00Z"
-  "@aws-sdk/client-s3":
-    version: "latest compatible major; verify with npm install before implementation"
-    context7_id: "/aws/aws-sdk-js-v3"
-    fetched_at: "2026-09-30T00:00:00Z"
-  "@aws-sdk/s3-request-presigner":
-    version: "latest compatible major; verify with npm install before implementation"
-    context7_id: "/aws/aws-sdk-js-v3"
-    fetched_at: "2026-09-30T00:00:00Z"
-  ffmpeg:
-    version: "container package; pin image/package during SI-03.1"
-    context7_id: "official-ffmpeg"
-    fetched_at: "2026-09-30T00:00:00Z"
-sources_mtime:
-  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-30T18:25:37Z"
+  bullmq: { version: "6.3.11" }
+  "@nestjs/bullmq": { version: "12.0.0" }
+  "@aws-sdk/client-s3": { version: "3.1147.0" }
+  "@aws-sdk/s3-request-presigner": { version: "3.1147.0" }
+  ffmpeg: { observed_version: "5.1.9-0+deb12u1" }
+  minio: { version: "2025.4.22", image_digest: "sha256:a26e42a4d6550d2fb7708c8ceefc60474b42c124b6f3273a081721ddf1d86b20" }
 ---
 
 # Library References — Phase 03 Videos
 
-## bullmq
+Revisão em 2026-10-13. Versões Node/dependências verificadas no container e package-lock. FFmpeg é instalado por APT nos Dockerfiles e a versão acima é a observada nesta validação. MinIO e Node estão fixados no Compose/Dockerfiles.
 
-Use BullMQ with Redis for the video-processing queue. The implementation must use a dedicated `Worker`, explicit queue/job names, bounded concurrency, retry attempts, and backoff. The worker must throw `Error` instances for failures and must be closed cleanly during shutdown.
+Context7 não foi exposto como ferramenta nativa nesta sessão. O adaptador stdio 4.3.0 foi iniciado e resolve-library-id foi solicitado, mas retornou fetch failed; nenhuma documentação veio dessa tentativa. Foram consultadas fontes oficiais verificáveis via GitHub e assinaturas das APIs das versões instaladas. A configuração equivalente para novas sessões Codex está em `.codex/config.toml`. Não se atribuem a Context7 resultados que não foram obtidos.
 
-Official references consulted:
-- BullMQ workers and job lifecycle.
-- BullMQ automatic retries and backoff.
-- BullMQ Redis connection guidance.
+## S3 multipart — AWS SDK v3
 
-## @aws-sdk/client-s3
+Fonte oficial: https://github.com/awsdocs/amazon-s3-userguide/blob/main/doc_source/mpuoverview.md
 
-Use the AWS SDK for JavaScript v3 S3 client against MinIO in development. The storage adapter must use S3 commands for bucket/object operations and multipart upload lifecycle, without importing MinIO-specific APIs into the domain layer.
+O protocolo cria UploadId, assina UploadPart (PartNumber e ContentLength), lista partes para verificar tamanhos/ETags e conclui com CompleteMultipartUpload. AbortMultipartUpload libera partes de sessões canceladas. Assinaturas verificadas nos tipos do SDK 3.1147.0. Parte mínima de 5 MiB, exceto a última; máximo 10.000 partes. A escolha local de 64 MiB produz 160 partes para 10 GiB. Upload e conclusão reais foram testados com MinIO, incluindo o tamanho de 10 GiB.
 
-## @aws-sdk/s3-request-presigner
+## BullMQ + Nest
 
-Use presigned requests for multipart part uploads and, where appropriate, object access. The API remains responsible for authorization and session coordination; the browser/client transfers file bytes directly to MinIO/S3.
+Fontes oficiais:
+- https://github.com/taskforcesh/bullmq/blob/master/docs/gitbook/guide/workers/README.md
+- https://github.com/nestjs/bull/blob/master/packages/bullmq/lib/bull.module.ts
+- Tipos instalados de Queue/Worker em bullmq 6.3.11 e @nestjs/bullmq 12.0.0.
 
-## FFmpeg and ffprobe
+Queue.add usa jobId determinístico, attempts:3, backoff exponencial. Apenas WorkerModule registra o Processor; API registra produtor/repositórios. Worker.waitUntilReady demonstra conexão com Redis. Contexto Nest trata encerramento e fechamento das conexões. Jobs falhos retidos para diagnóstico/reprocessamento.
 
-The worker image must include `ffmpeg` and `ffprobe`. `ffprobe` is used to extract format/stream metadata and duration; `ffmpeg` is used to generate a deterministic thumbnail frame. Temporary files must be isolated per job and removed on success and failure.
+## FFmpeg / ffprobe
 
-## Version policy
+Fonte oficial da linha testada: https://github.com/FFmpeg/FFmpeg/blob/n5.1.9/doc/protocols.texi (HTTP, seekable) e https://github.com/FFmpeg/FFmpeg/blob/n5.1.9/doc/ffprobe.texi.
 
-The repository currently does not contain BullMQ or AWS SDK v3 dependencies. The implementation SI that installs them must verify the resolved versions inside the backend container, update `package.json` and `package-lock.json` together, and re-run the relevant library documentation lookup before coding against APIs.
+ExecFile executa sem shell, com timeout/maxBuffer. FFprobe lê JSON de format/streams e FFmpeg extrai um frame; entrada HTTP interna assinada suporta seeking, sem baixar outra cópia integral do vídeo. Formatos de mídia aceitos pelo worker: MOV/MP4, Matroska/WebM, AVI, MPEG/TS, Ogg e FLV; manifestos/playlists não são habilitados. URLs não são persistidas. Thumbnail temporário isolado é removido em finally. Os testes usaram mídia real, inclusive subsegundo, e arquivo inválido. Fluent-ffmpeg não é usado no novo pipeline.
+
+## MinIO
+
+Fonte oficial do servidor: https://github.com/minio/minio/tree/RELEASE.2025-04-22T22-12-26Z
+
+Imagem Bitnami 2025.4.22 fixada por digest; servidor, bucket, multipart, head/get/delete e HTTP Range foram exercitados. Credenciais do Compose são apenas de desenvolvimento local. Sem conta S3 externa requerida.

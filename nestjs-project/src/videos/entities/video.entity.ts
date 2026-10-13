@@ -55,6 +55,15 @@ export class Video {
   @Column({ type: 'bigint', nullable: true })
   file_size: string | null;
 
+  @Column({ type: 'varchar', length: 1000, nullable: true })
+  upload_id: string | null;
+
+  @Column({ type: 'integer', nullable: true })
+  upload_part_size: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  upload_expires_at: Date | null;
+
   @Column({ type: 'varchar', length: 120, nullable: true })
   mime_type: string | null;
 

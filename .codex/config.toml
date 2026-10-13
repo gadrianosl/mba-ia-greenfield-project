@@ -1,0 +1,14 @@
+# Copie para a configuração Codex apropriada e confira os servidores antes de usar.
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp@4.3.0"]
+
+[mcp_servers.postgres]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-postgres@0.6.2", "postgresql://streamtube:streamtube@localhost:5432/streamtube"]
+# A conexão acima usa apenas as credenciais locais de desenvolvimento do Compose.
+# Para outro ambiente, configure a conexão segura fora do repositório.
+
+# Em ambientes com proxy gerenciado, configure os destinos Context7 e o trust
+# bundle na máquina. Segredos pessoais devem ser definidos nas configurações,
+# nunca neste arquivo versionado.

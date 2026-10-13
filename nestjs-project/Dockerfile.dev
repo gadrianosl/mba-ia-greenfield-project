@@ -1,14 +1,8 @@
+# syntax=docker/dockerfile:1
 FROM node:25.6.0-slim
-
-# Instala as dependências do sistema (procps, curl e ffmpeg para processamento de vídeo)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    procps \
-    curl \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
+COPY docker/install-system-deps.sh /usr/local/bin/install-system-deps
+RUN --mount=type=secret,id=proxy_ca sh /usr/local/bin/install-system-deps procps curl ffmpeg
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 WORKDIR /home/node/app
-
 USER node
-
-CMD [ "npm", "run", "start:dev" ]
+CMD ["tail", "-f", "/dev/null"]

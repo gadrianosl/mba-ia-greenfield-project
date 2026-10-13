@@ -1,41 +1,24 @@
-import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import { VideosService } from './videos.service';
+import { VideoProcessingService } from './video-processing.service';
+import { VIDEO_QUEUE } from './queue/video-queue.module';
 
-@Processor('video-processing')
-@Injectable()
+export interface VideoJob {
+  videoId: string;
+  storageKey: string;
+}
+
+@Processor(VIDEO_QUEUE, {
+  concurrency: Number(process.env.VIDEO_WORKER_CONCURRENCY || 2),
+})
 export class VideosProcessor extends WorkerHost {
-  private readonly logger = new Logger(VideosProcessor.name);
-
-  constructor(private readonly videosService: VideosService) {
+  constructor(private readonly processing: VideoProcessingService) {
     super();
   }
 
-  async process(job: Job<any, any, string>): Promise<any> {
-    this.logger.log(
-      `Iniciando processamento do Job ID: ${job.id} (${job.name})`,
-    );
-
-    if (job.name === 'process-video') {
-      const { videoId, publicId, storageKey } = job.data;
-      this.logger.log(`Processando vídeo: ${publicId} | Key: ${storageKey}`);
-
-      await this.videosService.processVideo(videoId, storageKey);
-    }
-
-    return { completed: true };
-  }
-
-  @OnWorkerEvent('completed')
-  onCompleted(job: Job) {
-    this.logger.log(`Job ID ${job.id} (${job.name}) finalizado com sucesso.`);
-  }
-
-  @OnWorkerEvent('failed')
-  onFailed(job: Job, error: Error) {
-    this.logger.error(
-      `Job ID ${job.id} (${job.name}) falhou: ${error.message}`,
-    );
+  async process(job: Job<VideoJob>): Promise<void> {
+    if (job.name !== 'process-video')
+      throw new Error(`Unknown video job: ${job.name}`);
+    await this.processing.process(job.data.videoId, job.data.storageKey);
   }
 }

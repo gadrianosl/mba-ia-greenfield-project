@@ -4,8 +4,8 @@ name: phase-03-videos
 status: clean
 issue_count: 0
 sources_mtime:
-  docs/phases/phase-03-videos/context.md: "2026-09-30T14:54:24Z"
-  docs/decisions/technical-decisions-phase-03-videos.md: "2026-09-30T18:25:37Z"
+  docs/phases/phase-03-videos/context.md: "2026-10-13T11:36:15Z"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-10-13T11:53:22Z"
 issues:
   - id: AMB-1
     status: resolved
@@ -98,4 +98,9 @@ _None._
 
 `status: clean`
 
-A fase de resolução da Fase 03 foi concluída com todas as pendências fechadas. O próximo passo do pipeline é a geração do plano executável do build, com SI-03.1, SI-03.2 e demais entregáveis de implementação.
+A resolução do planejamento foi concluída. O plano executável e a implementação das seis SIs foram revisados e concluídos nesta retomada; as evidências atuais estão em `progress.md`.
+## Revisão final da implementação — 2026-10-13
+
+Contratos multipart, autorização por proprietário, estados persistidos, worker separado, retries, streaming Range e download conferidos contra a implementação. 179 testes principais e 56 E2E aprovados, sem skips; TypeScript, build e lint aprovados. Upload real de 10 GiB e processamento pelo worker do Compose validados. O status `clean` descreve a resolução das ambiguidades do plano.
+
+Limitação externa: o Context7 foi configurado, mas a consulta via MCP stdio retornou `TypeError: fetch failed`. Referências oficiais foram consultadas e registradas sem atribuir resultados ao MCP. Commit, push, merge e publicação do ambiente não fazem parte dos checks executados.

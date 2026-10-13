@@ -1,8 +1,16 @@
-import { IsInt, IsNotEmpty, IsString, Matches, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class InitializeVideoUploadDto {
   @IsInt()
   @Min(1)
+  @Max(10 * 1024 * 1024 * 1024)
   file_size: number;
 
   @IsString()

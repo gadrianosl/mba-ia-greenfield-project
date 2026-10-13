@@ -1,24 +1,36 @@
 import {
-  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
+  HttpCode,
   HttpStatus,
   Param,
   Post,
   Query,
   Res,
 } from '@nestjs/common';
+import { IsInt, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import type { Response } from 'express';
+import { pipeline } from 'node:stream/promises';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import type { JwtPayload } from '../auth/auth.types';
 import { StorageService } from '../storage/storage.service';
 import { CreateVideoDraftDto } from './dto/create-video-draft.dto';
 import { InitializeVideoUploadDto } from './dto/initialize-video-upload.dto';
-import { Video, VideoStatus } from './entities/video.entity';
+import { StartVideoUploadDto } from './dto/start-video-upload.dto';
+import { SignUploadPartsDto } from './dto/sign-upload-parts.dto';
+import { CompleteVideoUploadDto } from './dto/complete-video-upload.dto';
 import { VideosService } from './videos.service';
+import { normalizeRange } from './streaming-range';
+
+class VideoPageDto {
+  @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 10;
+}
 
 @Controller('videos')
 export class VideosController {
@@ -29,26 +41,37 @@ export class VideosController {
 
   @Public()
   @Get()
-  findAll(@Query('page') page = '1', @Query('limit') limit = '10') {
-    return this.videosService.findAllPublic(+page, +limit);
+  findAll(@Query() query: VideoPageDto) {
+    return this.videosService.findAllPublic(query.page, query.limit);
   }
 
   @Post('drafts')
   createDraft(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateVideoDraftDto,
-  ): Promise<Video> {
+  ) {
     return this.videosService.createDraft(user.sub, dto);
   }
 
+  @Post('uploads')
+  startUpload(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: StartVideoUploadDto,
+  ) {
+    return this.videosService.startUpload(user.sub, dto);
+  }
+
   @Get('mine')
-  listMine(@CurrentUser() user: JwtPayload): Promise<Video[]> {
+  listMine(@CurrentUser() user: JwtPayload) {
     return this.videosService.listMine(user.sub);
   }
 
   @Get(':publicId')
-  findOne(@Param('publicId') publicId: string) {
-    return this.videosService.findOneDetails(publicId);
+  findOne(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ) {
+    return this.videosService.findOneDetails(publicId, user.sub);
   }
 
   @Post(':publicId/upload')
@@ -56,51 +79,78 @@ export class VideosController {
     @CurrentUser() user: JwtPayload,
     @Param('publicId') publicId: string,
     @Body() dto: InitializeVideoUploadDto,
-  ): Promise<{
-    public_id: string;
-    storage_key: string;
-    upload_url: string;
-    expires_in: number;
-  }> {
+  ) {
     return this.videosService.initializeUpload(user.sub, publicId, dto);
   }
 
-  @Post(':publicId/upload/complete')
+  @Post(':publicId/uploads/parts')
+  signParts(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+    @Body() dto: SignUploadPartsDto,
+  ) {
+    return this.videosService.signParts(user.sub, publicId, dto.part_numbers);
+  }
+
+  @Post([':publicId/uploads/complete', ':publicId/upload/complete'])
+  @HttpCode(HttpStatus.ACCEPTED)
   completeUpload(
     @CurrentUser() user: JwtPayload,
     @Param('publicId') publicId: string,
-  ): Promise<Video> {
-    return this.videosService.completeUpload(user.sub, publicId);
+    @Body() dto: CompleteVideoUploadDto,
+  ) {
+    return this.videosService.completeUpload(user.sub, publicId, dto);
+  }
+
+  @Delete(':publicId/upload')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  cancelUpload(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ) {
+    return this.videosService.cancelUpload(user.sub, publicId);
+  }
+
+  @Post(':publicId/process')
+  @HttpCode(HttpStatus.ACCEPTED)
+  reprocess(
+    @CurrentUser() user: JwtPayload,
+    @Param('publicId') publicId: string,
+  ) {
+    return this.videosService.reprocess(user.sub, publicId);
   }
 
   @Public()
   @Get(':publicId/stream')
   async streamVideo(
     @Param('publicId') publicId: string,
-    @Headers('range') range: string,
+    @Headers('range') range: string | undefined,
     @Res() res: Response,
-  ) {
-    const video = await this.videosService.findOneDetails(publicId);
-
-    if (video.status !== VideoStatus.READY || !video.storage_key) {
-      throw new BadRequestException(
-        'O vídeo ainda não está pronto para reprodução.',
-      );
+  ): Promise<void> {
+    const video = await this.videosService.findReady(publicId);
+    let selectedRange: string | undefined;
+    if (range) {
+      const head = await this.storageService.headObject(video.storage_key!);
+      const size = head.ContentLength ?? Number(video.file_size);
+      try {
+        selectedRange = normalizeRange(range, size);
+      } catch (error) {
+        res.setHeader('Content-Range', `bytes */${size}`);
+        throw error;
+      }
     }
-
-    const { stream, contentLength, contentRange, acceptRanges, contentType } =
-      await this.storageService.getObjectStream(video.storage_key, range);
-
-    const statusCode = range ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK;
-
-    res.writeHead(statusCode, {
-      'Content-Type': contentType || 'video/mp4',
-      ...(contentLength !== undefined && { 'Content-Length': contentLength }),
-      'Accept-Ranges': acceptRanges || 'bytes',
-      ...(contentRange && { 'Content-Range': contentRange }),
-    });
-
-    stream.pipe(res);
+    const object = await this.storageService.getObjectStream(
+      video.storage_key!,
+      selectedRange,
+    );
+    res.status(selectedRange ? 206 : 200);
+    res.setHeader('Content-Type', object.contentType || 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (object.contentLength !== undefined)
+      res.setHeader('Content-Length', object.contentLength);
+    if (object.contentRange)
+      res.setHeader('Content-Range', object.contentRange);
+    await pipeline(object.stream, res);
   }
 
   @Public()
@@ -108,27 +158,17 @@ export class VideosController {
   async downloadVideo(
     @Param('publicId') publicId: string,
     @Res() res: Response,
-  ) {
-    const video = await this.videosService.findOneDetails(publicId);
-
-    if (video.status !== VideoStatus.READY || !video.storage_key) {
-      throw new BadRequestException(
-        'O vídeo ainda não está disponível para download.',
-      );
-    }
-
-    const { stream, contentLength, contentType } =
-      await this.storageService.getObjectStream(video.storage_key);
-
-    const safeTitle = (video.title || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `${safeTitle}.mp4`;
-
-    res.writeHead(HttpStatus.OK, {
-      'Content-Type': contentType || 'video/mp4',
-      ...(contentLength !== undefined && { 'Content-Length': contentLength }),
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    });
-
-    stream.pipe(res);
+  ): Promise<void> {
+    const video = await this.videosService.findReady(publicId);
+    const object = await this.storageService.getObjectStream(
+      video.storage_key!,
+    );
+    const filename = `${video.title.replace(/[^a-zA-Z0-9_-]/g, '_') || 'video'}.mp4`;
+    res.status(200);
+    res.setHeader('Content-Type', object.contentType || 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    if (object.contentLength !== undefined)
+      res.setHeader('Content-Length', object.contentLength);
+    await pipeline(object.stream, res);
   }
 }

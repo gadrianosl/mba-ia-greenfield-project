@@ -13,19 +13,24 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:integration": "jest --runInBand --testRegex=\"\\.integration-spec\\.ts$\"",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts",
-    "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts"
+    "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts",
+    "pretest:e2e": "npm run build",
+    "test:prepare": "ts-node src/test/global-setup-cli.ts",
+    "start:worker": "node dist/worker.js",
+    "test:large-upload": "ts-node scripts/verify-large-upload.ts",
+    "pretest:large-upload": "npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1147.0",
@@ -79,7 +84,7 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
-"jest": {
+  "jest": {
     "moduleFileExtensions": [
       "js",
       "json",
@@ -99,7 +104,8 @@
       "dotenv/config"
     ],
     "transformIgnorePatterns": [
-  "node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared)/)"
-]
+      "node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared)/)"
+    ],
+    "globalSetup": "<rootDir>/test/global-setup.ts"
   }
 }

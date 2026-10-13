@@ -104,3 +104,7 @@ Ao fim da implementação, a Fase 03 deve entregar uma API funcional para:
 ## Observação de rastreabilidade
 
 Este contexto deriva diretamente dos requisitos da fase em `docs/project-plan.md` e das decisões registradas em `docs/decisions/technical-decisions-phase-03-videos.md`. A implementação e os testes devem seguir precisamente este escopo e não ampliar o desenho sem uma nova decisão formal.
+
+## Estado verificado da retomada — 2026-10-13
+
+Infraestrutura implementada: MinIO fixado por digest, Redis e worker separado. Upload multipart usa partes de 64 MiB e valida ETags/tamanhos no storage. Contratos finais estão no plano; publication/visibilidade da Fase 04 ficam fora do escopo. O worker lê via URL interna e HTTP Range, grava apenas thumbnail temporário e remove URLs assinadas de metadata/erros. Essas emendas refinam TD-02/03/04/05/06 e preservam os requisitos de Orientacoes.

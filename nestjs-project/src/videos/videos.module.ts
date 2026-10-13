@@ -1,30 +1,21 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BullModule } from '@nestjs/bullmq';
 import { ChannelsModule } from '../channels/channels.module';
 import { Video } from './entities/video.entity';
 import { VideosController } from './videos.controller';
 import { VideosService } from './videos.service';
 import { StorageModule } from '../storage/storage.module';
-import { VideosProcessor } from './videos.processor';
+import { VideoQueueModule } from './queue/video-queue.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Video]),
     ChannelsModule,
     StorageModule,
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || 'redis',
-        port: Number(process.env.REDIS_PORT) || 6379,
-      },
-    }),
-    BullModule.registerQueue({
-      name: 'video-processing',
-    }),
+    VideoQueueModule,
   ],
   controllers: [VideosController],
-  providers: [VideosService, VideosProcessor],
+  providers: [VideosService],
   exports: [TypeOrmModule, VideosService],
 })
 export class VideosModule {}
