@@ -45,9 +45,9 @@ O projeto é um monorepo baseado em containers Docker. Cada subprojeto sobe sua 
 - **API** (NestJS 11) — regras de negócio, autenticação (JWT + refresh token rotation), envio de e-mails e acesso ao banco.
 - **Database** (PostgreSQL 17) — usuários, canais e tokens de autenticação.
 - **Email Service** (Mailpit) — captura os e-mails transacionais (confirmação de conta e recuperação de senha) em uma UI local.
-- **Video Worker** (FFmpeg) — processamento de vídeos *(planejado — Fase 03)*.
-- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails *(planejado — Fase 03)*.
-- **Message Queue** — fila de processamento de vídeos *(planejado — Fase 03)*.
+- **Video Worker** (FFmpeg) — processamento assíncrono de vídeos em container separado.
+- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails.
+- **Message Queue** (BullMQ + Redis) — fila de processamento de vídeos.
 
 O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.mermaid`.
 
@@ -60,17 +60,23 @@ Os dois subprojetos têm stacks Docker **separadas**. Suba primeiro o backend, r
 ```bash
 cd nestjs-project
 
-# Sobe API, banco e Mailpit
-docker compose up -d
+# Cria configuração local (preserve um arquivo existente)
+test -f .env || cp .env.example .env
+
+# Sobe infra e container de comandos da API
+docker compose up -d db redis minio mailpit nestjs-api
 
 # Instala dependências (apenas na primeira vez)
-docker compose exec nestjs-api npm install
+docker compose exec -T nestjs-api npm ci
 
 # Cria o schema do banco (obrigatório — synchronize está desabilitado)
-docker compose exec nestjs-api npm run migration:run
+docker compose exec -T nestjs-api npm run migration:run
 
 # Sobe o servidor de desenvolvimento em watch mode
 docker compose exec -d nestjs-api npm run start:dev
+
+# Imagem independente com dependências e FFmpeg
+docker compose up -d --build video-worker
 ```
 
 Serviços disponíveis:
@@ -78,6 +84,8 @@ Serviços disponíveis:
 | Serviço | URL / Porta |
 |---------|-------------|
 | API NestJS | http://localhost:3000 |
+| MinIO API / Console | portas `9000` / `9001` |
+| Redis | porta `6379` |
 | PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
 | Mailpit (UI de e-mails) | http://localhost:8025 |
 | Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
@@ -195,7 +203,7 @@ green-field-ia-project/
 |------|-----------|--------|
 | **01** | Configuração Base do Projeto | ✅ Concluída |
 | **02** | Cadastro, Login e Gerenciamento de Conta | ✅ Concluída |
-| **03** | Upload e Processamento de Vídeos | ⏳ Planejada |
+| **03** | Upload e Processamento de Vídeos | ✅ Implementada e validada |
 | **04** | Gerenciamento de Vídeos e Canal | ⏳ Planejada |
 | **05** | Página de Visualização do Vídeo | ⏳ Planejada |
 | **06** | Interações Sociais (Likes, Comentários, Inscrições) | ⏳ Planejada |
@@ -215,3 +223,28 @@ Detalhes completos em `docs/project-plan.md`.
 | Testes | Jest, Supertest (backend); Vitest, MSW, Playwright (frontend) |
 | Qualidade | ESLint, Prettier |
 </content>
+
+
+## Fase 03 — upload e processamento de vídeos
+
+A entrega desta fase é backend: multipart direto ao MinIO, BullMQ/Redis, worker separado com FFmpeg, metadados/duração, thumbnail, URL única, streaming Range/206 e download. Todos os vídeos READY são públicos; interface de vídeos, publicação e visibilidade detalhada pertencem às fases seguintes.
+
+Fluxo HTTP autenticado: POST /videos/uploads cria o rascunho e sessão; POST /videos/:publicId/uploads/parts retorna URLs PUT para part_numbers; envie as partes diretamente ao storage e guarde os ETags; POST /videos/:publicId/uploads/complete recebe parts [{part_number,etag}] e responde 202. Consulte GET /videos/:publicId até READY. Mídia pública usa /videos/:publicId/stream e /download. Cancelamento é DELETE /videos/:publicId/upload; reprocessamento é POST /videos/:publicId/process, apenas em ERROR.
+
+MINIO_PUBLIC_URL deve ser alcançável pelo cliente das URLs assinadas (padrão http://localhost:9000 no host local). MINIO_ENDPOINT é interno, http://minio:9000. Parte padrão: 64 MiB; tamanho máximo: 10 GiB; URLs válidas por uma hora, sessão por 24 horas. Partes podem ser reenviadas/URLs renovadas na mesma sessão. Worker busca somente os ranges necessários no objeto, sem uma cópia temporária integral.
+
+Validação no diretório nestjs-project, com infraestrutura ativa:
+
+```bash
+docker compose exec -T nestjs-api npm test
+docker compose exec -T nestjs-api npm run test:e2e
+docker compose exec -T nestjs-api npx tsc --noEmit
+docker compose exec -T nestjs-api npm run build
+docker compose exec -T nestjs-api npm run lint
+# Capacidade real: reserva temporariamente 10 GiB no storage
+docker compose exec -T nestjs-api npm run test:large-upload
+```
+
+Banco/fila/bucket de testes são isolados. Execute as duas suítes sequencialmente. O E2E inicia um processo worker separado e usa PostgreSQL, Redis, MinIO, FFmpeg e Mailpit reais. O teste de tamanho usa um MP4 válido curto com padding até 10 GiB, verifica processamento e remove seus dados. Reserve pelo menos 11 GiB livres no volume MinIO; os testes não substituem benchmark de vídeos longos.
+
+Decisões: docs/decisions/technical-decisions-phase-03-videos.md. Plano, validação, referências e progresso: docs/phases/phase-03-videos/. A fundação Codex está em AGENTS.md, .agents/skills/phase-03-workflow/SKILL.md e .codex/config.toml. Credenciais do Compose são apenas locais; arquivos .env não entram nas imagens Docker.

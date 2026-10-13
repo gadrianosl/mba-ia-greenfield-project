@@ -25,7 +25,7 @@ This project runs inside Docker. Always use the container for development:
 docker compose up -d
 
 # Install dependencies (first time only)
-docker compose exec nestjs-api npm install
+docker compose exec nestjs-api npm ci
 
 # Run the dev server (watch mode)
 docker compose exec nestjs-api npm run start:dev
@@ -33,7 +33,7 @@ docker compose exec nestjs-api npm run start:dev
 
 Services:
 - `nestjs-api` — NestJS API, port `3000`
-- `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `db` — PostgreSQL 17, port `5432`, development database `streamtube`, user/password `streamtube`
 
 All verification and teardown commands run on the **host machine**:
 
@@ -159,3 +159,16 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 ## REST Conventions
 
 This is a RESTful API. All endpoints must follow standard REST conventions — correct HTTP methods, proper status codes, plural resource nouns, and consistent URL structure. Details are enforced via rules on controller files.
+
+
+## Phase 03 — videos, storage and separate worker
+
+Use the startup sequence in the root README: start infrastructure/API command container, npm ci, migration:run, start:dev, then video-worker. The API command container stays alive before dependency installation; it does not auto-start a watch process. Worker image includes FFmpeg/ffprobe and starts dist/worker.js. Source roles: config/runtime.module.ts for common configuration/database, videos/queue/video-queue.module.ts for producer queue, videos.module.ts for HTTP/producer, worker.module.ts for consumer and video-processing.service.ts.
+
+API routes and contracts are documented in docs/phases/phase-03-videos/phase-03-videos.md. Upload parts go directly to MinIO; API never receives large binary bodies. Only READY media is public. Owners can sign/complete/cancel uploads and reprocess ERROR. Worker reads source using signed internal HTTP Range requests, stores metadata/duration/thumbnail and removes temporary thumbnails. Do not log signed URLs.
+
+All tests automatically prepare a dedicated DB via src/test/global-setup.ts; DB_TEST_NAME defaults to streamtube_test and must end in _test. Migration tests use another temporary DB. Queue/bucket are video-processing-test and streamtube-test. Execute the main and E2E suites sequentially; do not run them concurrently against the same database.
+
+`docker compose exec -T nestjs-api npm run test:large-upload` performs a real 10 GiB multipart transfer, responsiveness probes and worker processing, then removes its generated data. Requires at least 11 GiB free in the MinIO volume. Fixture is a short valid MP4 padded to 10 GiB; this is a capacity check, not a long-film benchmark.
+
+MCP stdio tools use the Codex host runtime; the container-only requirement applies to the application commands. Context7/Postgres configuration is in the repository .codex/config.toml. Their availability must be checked independently from application readiness.

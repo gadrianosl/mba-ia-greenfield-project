@@ -1,9 +1,8 @@
+# syntax=docker/dockerfile:1
 FROM node:25.6.0-slim
-
-RUN apt update && apt install -y procps curl
-
+COPY docker/install-system-deps.sh /usr/local/bin/install-system-deps
+RUN --mount=type=secret,id=proxy_ca sh /usr/local/bin/install-system-deps procps curl ffmpeg
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 WORKDIR /home/node/app
-
 USER node
-
-CMD [ "tail", "-f", "/dev/null" ] 
+CMD ["tail", "-f", "/dev/null"]

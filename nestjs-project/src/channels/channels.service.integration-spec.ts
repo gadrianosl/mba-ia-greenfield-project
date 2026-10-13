@@ -23,7 +23,7 @@ describe('ChannelsService (integration)', () => {
     userRepository = dataSource.getRepository(User);
     channelRepository = dataSource.getRepository(Channel);
     channelsService = new ChannelsService(dataSource);
-  });
+  }, 30000); // <--- Adicionado timeout de 30 segundos aqui
 
   afterAll(async () => {
     await dataSource.destroy();

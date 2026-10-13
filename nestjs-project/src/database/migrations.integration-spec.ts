@@ -16,12 +16,18 @@ const MANAGED_TABLES = [
 
 describe('Database migrations (integration)', () => {
   let dataSource: DataSource;
+  let admin: DataSource;
+  const database = `streamtube_migrations_${process.pid}_test`;
 
   beforeAll(async () => {
+    admin = createTestDataSource([], { database: 'postgres' });
+    await admin.initialize();
+    await admin.query(`CREATE DATABASE "${database}"`);
     dataSource = createTestDataSource(
       [User, Channel, RefreshToken, VerificationToken],
       {
         synchronize: false,
+        database,
         migrations: [
           CreateUsersAndChannels1775687773260,
           CreateAuthTokens1777579850478,
@@ -30,20 +36,20 @@ describe('Database migrations (integration)', () => {
     );
 
     await dataSource.initialize();
-
-    await Promise.all([
-      ...MANAGED_TABLES.map((table) =>
-        dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`),
-      ),
-      dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
-    ]);
   });
 
   afterAll(async () => {
     // The second test undoes the last migration, leaving token tables missing.
     // Re-apply so the shared DB is fully migrated when subsequent suites run.
-    await dataSource.runMigrations();
-    await dataSource.destroy();
+    try {
+      if (dataSource?.isInitialized) {
+        await dataSource.runMigrations();
+        await dataSource.destroy();
+      }
+    } finally {
+      await admin.query(`DROP DATABASE "${database}"`);
+      await admin.destroy();
+    }
   });
 
   it('should apply all migrations and create all four tables', async () => {

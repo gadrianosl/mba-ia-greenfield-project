@@ -6,12 +6,55 @@ import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
-import { AuthService } from '../src/auth/auth.service';
 import { RefreshToken } from '../src/auth/entities/refresh-token.entity';
 import { VerificationToken } from '../src/auth/entities/verification-token.entity';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { cleanAllTables } from '../src/test/create-test-data-source';
+
+const mailpitUrl = process.env.MAILPIT_API_URL ?? 'http://mailpit:8025';
+
+interface CapturedMessage {
+  ID: string;
+  To: { Address: string }[];
+}
+
+async function clearCapturedEmails(): Promise<void> {
+  const response = await fetch(`${mailpitUrl}/api/v1/messages`, {
+    method: 'DELETE',
+  });
+  expect(response.ok).toBe(true);
+}
+
+async function readEmailToken(email: string, path: string): Promise<string> {
+  const response = await fetch(`${mailpitUrl}/api/v1/messages`);
+  expect(response.ok).toBe(true);
+  const { messages } = (await response.json()) as {
+    messages: CapturedMessage[];
+  };
+  const message = messages.find((entry) =>
+    entry.To.some((recipient) => recipient.Address === email),
+  );
+  expect(message).toBeDefined();
+  const detailResponse = await fetch(
+    `${mailpitUrl}/api/v1/message/${message!.ID}`,
+  );
+  expect(detailResponse.ok).toBe(true);
+  const detail = (await detailResponse.json()) as { HTML: string };
+  const links = Array.from(detail.HTML.matchAll(/href="([^"]+)"/g));
+  const url = links
+    .map((match) => new URL(match[1].replaceAll('&amp;', '&')))
+    .find((link) => link.pathname === path);
+  expect(url).toBeDefined();
+  const token = url!.searchParams.get('token');
+  expect(token).toBeTruthy();
+  return token!;
+}
+
+function resetThrottler(storage: ThrottlerStorageService): void {
+  storage.onApplicationShutdown();
+  storage.storage.clear();
+}
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
@@ -47,30 +90,25 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
+    resetThrottler(throttlerStorage);
     await app.close();
   });
 
   beforeEach(async () => {
     await cleanAllTables(dataSource);
-    throttlerStorage.storage.clear();
+    resetThrottler(throttlerStorage);
+    await clearCapturedEmails();
   });
 
   async function captureConfirmationToken(
     email: string,
     password = 'password123',
   ): Promise<string> {
-    const authService = app.get(AuthService);
-    const mailServiceInstance = (authService as any).mailService;
-    let capturedToken = '';
-    jest
-      .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
-        capturedToken = t;
-      });
     await request(app.getHttpServer())
       .post('/auth/register')
-      .send({ email, password });
-    return capturedToken;
+      .send({ email, password })
+      .expect(201);
+    return readEmailToken(email, '/auth/confirm-email');
   }
 
   async function registerConfirmAndLogin(
@@ -80,10 +118,14 @@ describe('Auth (e2e)', () => {
     const token = await captureConfirmationToken(email, password);
     await request(app.getHttpServer())
       .get('/auth/confirm-email')
-      .query({ token });
+      .query({ token })
+      .expect(204);
     const res = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email, password });
+      .send({ email, password })
+      .expect(200);
+    expect(res.body.access_token).toEqual(expect.any(String));
+    expect(res.body.refresh_token).toEqual(expect.any(String));
     return {
       access_token: res.body.access_token,
       refresh_token: res.body.refresh_token,
@@ -232,7 +274,8 @@ describe('Auth (e2e)', () => {
 
       await request(app.getHttpServer())
         .get('/auth/confirm-email')
-        .query({ token });
+        .query({ token })
+        .expect(204);
 
       await request(app.getHttpServer())
         .post('/auth/resend-confirmation')
@@ -294,7 +337,8 @@ describe('Auth (e2e)', () => {
       const token = await captureConfirmationToken(email, password);
       await request(app.getHttpServer())
         .get('/auth/confirm-email')
-        .query({ token });
+        .query({ token })
+        .expect(204);
     }
 
     it('returns 200 with access_token and refresh_token on valid credentials', async () => {
@@ -511,18 +555,12 @@ describe('Auth (e2e)', () => {
   });
 
   async function capturePasswordResetToken(email: string): Promise<string> {
-    const authService = app.get(AuthService);
-    const mailServiceInstance = (authService as any).mailService;
-    let captured = '';
-    jest
-      .spyOn(mailServiceInstance, 'sendPasswordResetEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
-        captured = t;
-      });
+    await clearCapturedEmails();
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email });
-    return captured;
+      .send({ email })
+      .expect(204);
+    return readEmailToken(email, '/auth/reset-password');
   }
 
   describe('POST /auth/forgot-password', () => {
@@ -688,12 +726,14 @@ describe('Rate Limiting (e2e)', () => {
   });
 
   afterAll(async () => {
+    resetThrottler(throttlerStorage);
     await app.close();
   });
 
   beforeEach(async () => {
     await cleanAllTables(dataSource);
-    throttlerStorage.storage.clear();
+    resetThrottler(throttlerStorage);
+    await clearCapturedEmails();
   });
 
   it('returns 429 on the 11th request to an auth endpoint within the ttl window', async () => {
