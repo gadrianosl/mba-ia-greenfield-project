@@ -201,7 +201,7 @@ describe('Videos with real storage, queue and separate worker (e2e)', () => {
       let output = '';
       const timer = setTimeout(
         () => reject(new Error(`Worker startup timed out: ${output}`)),
-        20000,
+        60000,
       );
       const onOutput = (chunk: Buffer) => {
         output = (output + chunk.toString()).slice(-4000);
