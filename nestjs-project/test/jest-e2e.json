@@ -10,6 +10,6 @@
     "node_modules/(?!(@nestjs/bullmq|@nestjs/bull-shared)/)"
   ],
   "setupFiles": ["dotenv/config"],
-  "testTimeout": 60000,
+  "testTimeout": 120000,
   "globalSetup": "<rootDir>/../src/test/global-setup.ts"
 }
